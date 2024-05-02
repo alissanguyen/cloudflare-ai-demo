@@ -11,6 +11,8 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { sanitizeInput } from "./utils";
+
 export interface Env {
 	AI: any;
 }
@@ -39,9 +41,24 @@ export default {
 				headers: corsHeaders,
 			});
 		}
+		
+
+		/**
+		 * To handle the initial page load and prevent the page from crashing,
+		 * we check if the request method is GET and return a default response:
+		 */
+		if (request.method === 'GET') {
+			// Handle initial page load or GET requests
+			return new Response('Welcome to the Cloudflare Worker!', {
+				headers: {
+					'Content-Type': 'text/plain',
+					...corsHeaders,
+				},
+			});
+		}
 
 		const json: any = await readRequestBody(request);
-		console.log(json, 'json');
+		console.log(json, 'json - line 44');
 
 		if (json.model === 'imageClassification') {
 			// Handle image classification
@@ -60,7 +77,7 @@ export default {
 
 			newHeaders.set('Content-Type', 'application/json');
 			const jsonResponse = JSON.stringify(response);
-			console.log("IMAGE CLASSIFICATION JSON", jsonResponse);
+			console.log('IMAGE CLASSIFICATION JSON', jsonResponse);
 			return new Response(jsonResponse, { headers: newHeaders });
 		} else {
 			// Handle other models
@@ -79,6 +96,10 @@ export default {
 			if (json.prompt.length > 25000) {
 				return new Response(null, { status: 400, statusText: "4 -- i'm not that smart yet, ask something shorter please" });
 			}
+
+			// Validate and sanitize the prompt
+			const sanitizedPrompt = sanitizeInput(json.prompt);
+
 			/**
 			 * Each time a message is sent and a AI response is generated
 			 * save both to a database under a conversation ID
@@ -88,9 +109,8 @@ export default {
 			 */
 
 			// @ts-ignore
-			const response = await env.AI.run(models[json.model], { prompt: json.prompt });
+			const response = await env.AI.run(models[json.model], { prompt: sanitizedPrompt });
 
-			console.log(response, 'HAHAHAHA');
 			const newHeaders = new Headers(response.headers);
 
 			for (const header in corsHeaders) {
@@ -106,7 +126,6 @@ export default {
 				// Handle text response
 				newHeaders.set('Content-Type', 'application/json');
 				const jsonResponse = JSON.stringify({ data: response });
-				console.log(jsonResponse, 'text case json response');
 				return new Response(jsonResponse, { headers: newHeaders });
 			} else {
 				// Handle other cases or return an error response
@@ -125,7 +144,7 @@ async function readRequestBody(request: Request) {
 	const contentType = request.headers.get('content-type');
 
 	if (!contentType) {
-		throw new Error('Huhhhhhhh?');
+		return {};
 	}
 
 	console.log('content type', contentType, request.body);
