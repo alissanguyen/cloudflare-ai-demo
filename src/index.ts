@@ -11,6 +11,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { checkRateLimit } from "./rateLimit";
 import { sanitizeInput } from "./utils";
 
 export interface Env {
@@ -57,6 +58,18 @@ export default {
 			});
 		}
 
+		// Get the client IP address
+		const clientIP = request.headers.get('CF-Connecting-IP') || '';
+		console.log("CLIENT IP ADDRESS", clientIP)
+
+		// Check the rate limit for the client IP
+		if (!checkRateLimit(clientIP)) {
+		  return new Response('Rate limit exceeded. Please try again later.', {
+			status: 429,
+			headers: corsHeaders,
+		  });
+		}
+	  
 		const json: any = await readRequestBody(request);
 		console.log(json, 'json - line 44');
 
